@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wo bin ich?</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: eine Tafel-Fläche ohne Scrollen – Kopfzeile, Namens-Pool, vier gleich breite Orts-Spalten. Bewusst nur helles Thema (Smartboard). */
+:root {
+  --bg: #F2F4F8;
+  --surface: #FFFFFF;
+  --ink: #22314A;
+  --muted: #66738A;
+  --line: #C3CCDA;
+  --accent: #E0566C;
+  --z0: #E0566C; --z0-bg: #FBE4E9; --z0-on: #FFFFFF;
+  --z1: #1A9FD0; --z1-bg: #DAF0F9; --z1-on: #FFFFFF;
+  --z2: #E9AE38; --z2-bg: #FCF2DA; --z2-on: #3A2A06;
+  --z3: #3FA56D; --z3-bg: #DCF1E4; --z3-on: #FFFFFF;
+  --danger: #C2364C;
+  --pool-bg: rgba(255, 255, 255, .6);
+  --count-bg: rgba(255, 255, 255, .26);
+  --count-bg-dark: rgba(58, 42, 6, .14);
+  --font-display: "Fredoka", "Nunito", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --chip-size: clamp(16px, 1.35vw, 26px);
+  color-scheme: light;
+}
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+[hidden] { display: none !important; }
+body { height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; }
+
+.app {
+  height: 100%;
+  display: flex; flex-direction: column;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  overflow: auto;
+}
+#board { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; background: var(--bg); padding: 6px; }
+
+/* Kopfzeile */
+.top { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
+.title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 2.6vw, 46px); line-height: 1; letter-spacing: .01em; }
+h1 em { font-style: normal; color: var(--accent); }
+.pin { width: clamp(22px, 2vw, 34px); height: auto; flex: none; }
+.meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-weight: 700; font-size: clamp(14px, 1vw, 18px); }
+.classtag { background: var(--ink); color: var(--surface); border-radius: 999px; padding: 4px 12px; font-family: var(--font-display); font-weight: 600; letter-spacing: .02em; }
+.actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+  font: 700 15px/1 var(--font-body);
+  color: var(--ink); background: var(--surface);
+  border: 2px solid var(--line); border-radius: 999px;
+  padding: 10px 16px; min-height: 44px;
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--ink); }
+.btn:focus-visible, .chip:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--z1); outline-offset: 2px; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn.primary:hover { background: #33476A; }
+.btn.danger { color: var(--danger); border-color: #EBC2C9; }
+.btn.danger:hover { border-color: var(--danger); }
+.btn.small { min-height: 36px; padding: 7px 12px; font-size: 14px; }
+
+/* Namens-Pool */
+.pool {
+  min-height: 76px;
+  border: 3px dashed var(--line); border-radius: 22px;
+  background: var(--pool-bg);
+  padding: 12px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px;
+  max-height: 30vh; overflow: auto;
+  --c: var(--ink);
+}
+.pool.over { border-color: var(--ink); background: var(--surface); }
+.pool-hint { color: var(--muted); font-weight: 700; align-self: center; padding: 4px 8px; }
+
+/* Orte */
+.zones { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.zone { display: flex; flex-direction: column; min-height: 220px; border-radius: 22px; background: var(--zbg); overflow: hidden; transition: box-shadow .12s; }
+.zone[data-zone="0"] { --c: var(--z0); --zbg: var(--z0-bg); --on: var(--z0-on); }
+.zone[data-zone="1"] { --c: var(--z1); --zbg: var(--z1-bg); --on: var(--z1-on); }
+.zone[data-zone="2"] { --c: var(--z2); --zbg: var(--z2-bg); --on: var(--z2-on); --count-bg: var(--count-bg-dark); }
+.zone[data-zone="3"] { --c: var(--z3); --zbg: var(--z3-bg); --on: var(--z3-on); }
+.zone.over { box-shadow: inset 0 0 0 4px var(--c); }
+.zone-head { background: var(--c); color: var(--on); display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 68px; }
+.zone-icon { font-size: clamp(22px, 1.8vw, 32px); line-height: 1; flex: none; }
+.zone-title { flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(17px, 1.4vw, 25px); line-height: 1.15; text-wrap: balance; overflow-wrap: anywhere; }
+.zone-count { flex: none; min-width: 2.2em; text-align: center; font: 700 clamp(14px, 1vw, 18px)/1 var(--font-display); background: var(--count-bg); border-radius: 999px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+.zone-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px; }
+
+/* Namens-Chips */
+.chip {
+  font: 600 var(--chip-size)/1.1 var(--font-display);
+  letter-spacing: .01em;
+  color: var(--ink); background: var(--surface);
+  border: 3px solid var(--c); border-radius: 999px;
+  box-shadow: 0 3px 0 var(--c);
+  padding: .38em .95em .42em;
+  cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  touch-action: none;
+  max-width: 100%; overflow-wrap: anywhere;
+}
+.chip.dragging { opacity: .25; }
+.chip.selected { background: var(--c); color: var(--surface); }
+.zone[data-zone="2"] .chip.selected { color: var(--z2-on); }
+.ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; margin: 0; cursor: grabbing; box-shadow: 0 14px 28px rgba(34, 49, 74, .28), 0 3px 0 var(--c); transition: none; }
+
+/* Seitenleiste „Klassen & Namen“ */
+.scrim { position: fixed; inset: 0; background: rgba(34, 49, 74, .38); z-index: 50; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 60;
+  width: min(460px, 100%); background: var(--surface);
+  display: flex; flex-direction: column;
+  box-shadow: -10px 0 40px rgba(34, 49, 74, .18);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 2px solid var(--bg); }
+.drawer-head h2 { margin: 0; font: 600 24px/1.1 var(--font-display); }
+.drawer-body { flex: 1; overflow: auto; padding: 8px 20px 28px; display: flex; flex-direction: column; gap: 6px; }
+.sec { padding-block: 16px; border-bottom: 2px solid var(--bg); display: flex; flex-direction: column; gap: 10px; }
+.sec:last-child { border-bottom: 0; }
+.sec h3 { margin: 0; font: 700 13px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > input[type="text"], .row > select { flex: 1; min-width: 0; }
+input[type="text"], select {
+  font: 700 16px/1.2 var(--font-body); color: var(--ink); background: var(--surface);
+  border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 44px;
+}
+.hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.radio { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 15px; cursor: pointer; }
+.radio input { width: 18px; height: 18px; accent-color: var(--ink); }
+.file-label { position: relative; overflow: hidden; }
+.file-label input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.namelist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.namelist li { display: inline-flex; align-items: center; gap: 2px; background: var(--bg); border-radius: 999px; padding: 3px 3px 3px 12px; font-weight: 700; }
+.namelist button { border: 0; background: transparent; color: var(--muted); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 1; }
+.namelist button:hover { background: #F6D9DE; color: var(--danger); }
+.zone-edit { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; }
+.zone-edit input:first-child { text-align: center; padding-inline: 4px; }
+.swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+/* Dialoge & Hinweise */
+.modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(34, 49, 74, .45); }
+.modal-card { background: var(--surface); border-radius: 22px; padding: 22px; width: min(520px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 50px rgba(34, 49, 74, .3); }
+.modal-card.wide { width: min(900px, 100%); }
+.modal-card h2 { margin: 0; font: 600 22px/1.2 var(--font-display); }
+.modal-card p { margin: 0; line-height: 1.5; }
+.modal-card img { width: 100%; border-radius: 12px; border: 2px solid var(--bg); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  z-index: 90; background: var(--ink); color: var(--surface); border-radius: 999px;
+  padding: 10px 10px 10px 20px; font-weight: 700; display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 32px); box-shadow: 0 10px 30px rgba(34, 49, 74, .3);
+}
+.toast button { font: 800 14px/1 var(--font-body); background: var(--surface); color: var(--ink); border: 0; border-radius: 999px; padding: 9px 14px; cursor: pointer; }
+.toast:not(:has(button)) { padding-right: 20px; }
+
+@media (max-width: 1000px) {
+  .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .zone { min-height: 200px; }
+  .app { height: auto; min-height: 100%; }
+}
+@media (max-width: 560px) {
+  .zones { grid-template-columns: minmax(0, 1fr); }
+  .actions { margin-left: 0; }
+  .btn .lbl-long { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <main id="board" aria-label="Tafel: Wo bin ich?">
+    <header class="top">
+      <div class="title">
+        <h1>Wo bin <em>ich</em>?</h1>
+        <svg class="pin" viewBox="0 0 24 34" aria-hidden="true"><path d="M12 33 L9.5 18 h5 Z" fill="#8A97AC"/><circle cx="12" cy="10" r="9" fill="#E0566C"/><circle cx="9" cy="7" r="2.6" fill="#F7A9B6"/></svg>
+      </div>
+      <div class="meta"><span id="classLabel" class="classtag">–</span><span id="dateLabel"></span></div>
+      <div class="actions" data-html2canvas-ignore>
+        <button class="btn" id="btnManage" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M17 8h5M19.5 5.5v5"/></svg>
+          Klassen &amp; Namen
+        </button>
+        <button class="btn" id="btnReset" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v4.5h4.5"/></svg>
+          <span>Alle zurücksetzen</span>
+        </button>
+        <button class="btn primary" id="btnShot" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.5h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg>
+          <span>Tafelbild <span class="lbl-long">speichern</span></span>
+        </button>
+        <button class="btn" id="btnFull" type="button" aria-label="Vollbild" title="Vollbild">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section id="pool" class="pool" data-zone="pool" aria-label="Noch nicht eingeteilt"></section>
+
+    <div class="zones" id="zones">
+      <section class="zone" data-zone="0"><div class="zone-head"><span class="zone-icon"></span><span class="zone-title"></span><span class="zone-count">0</span></div><div class="zone-body"></div></section>
+      <section class="zone" data-zone="1"><div class="zone-head"><span class="zone-icon"></span><span class="zone-title"></span><span class="zone-count">0</span></div><div class="zone-body"></div></section>
+      <section class="zone" data-zone="2"><div class="zone-head"><span class="zone-icon"></span><span class="zone-title"></span><span class="zone-count">0</span></div><div class="zone-body"></div></section>
+      <section class="zone" data-zone="3"><div class="zone-head"><span class="zone-icon"></span><span class="zone-title"></span><span class="zone-count">0</span></div><div class="zone-body"></div></section>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Klassen und Namen verwalten">
+  <div class="drawer-head">
+    <h2>Klassen &amp; Namen</h2>
+    <button class="btn primary small" id="btnClose" type="button">Fertig</button>
+  </div>
+  <div class="drawer-body">
+    <div class="sec">
+      <h3>Klasse</h3>
+      <div class="row">
+        <select id="classSelect" aria-label="Klasse auswählen"></select>
+      </div>
+      <div class="row">
+        <input type="text" id="className" placeholder="Name der Klasse" aria-label="Klasse umbenennen" maxlength="40">
+      </div>
+      <div class="row">
+        <button class="btn small" id="btnNewClass" type="button">+ Neue Klasse</button>
+        <button class="btn small danger" id="btnDelClass" type="button">Klasse löschen</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3>Namen eintragen</h3>
+      <form class="row" id="addForm">
+        <input type="text" id="nameInput" placeholder="z. B. Lena oder Lena, Mia, Ben" aria-label="Name eingeben" autocomplete="off" maxlength="300">
+        <button class="btn primary small" type="submit">Hinzufügen</button>
+      </form>
+      <p class="hint">Mehrere Namen auf einmal mit Komma trennen.</p>
+    </div>
+
+    <div class="sec">
+      <h3>Excel-Liste laden</h3>
+      <label class="radio"><input type="radio" name="importMode" id="impNew" value="new" checked> Als neue Klasse anlegen</label>
+      <label class="radio"><input type="radio" name="importMode" id="impAdd" value="add"> Zur aktuellen Klasse hinzufügen</label>
+      <div class="row">
+        <label class="btn small file-label">Datei auswählen (.xlsx, .xls, .csv)
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.ods,.csv,.txt">
+        </label>
+      </div>
+      <p class="hint">Gelesen wird das erste Tabellenblatt. Gibt es eine Spalte „Vorname“ oder „Name“, wird diese genommen, sonst die erste Spalte. Doppelte Vornamen bekommen den Anfangsbuchstaben aus „Nachname“, falls vorhanden.</p>
+    </div>
+
+    <div class="sec">
+      <div class="row" style="justify-content: space-between;">
+        <h3 id="listTitle">Namen</h3>
+        <button class="btn small danger" id="btnDelAll" type="button">Alle Namen löschen</button>
+      </div>
+      <ul class="namelist" id="nameList"></ul>
+    </div>
+
+    <div class="sec">
+      <h3>Orte anpassen</h3>
+      <div id="zoneEdit" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      <div class="row"><button class="btn small" id="btnZoneDefault" type="button">Standard-Orte wiederherstellen</button></div>
+    </div>
+  </div>
+</aside>
+
+<div class="modal" id="confirmModal" hidden role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="modal-card">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmText"></p>
+    <div class="modal-actions">
+      <button class="btn" id="confirmNo" type="button">Abbrechen</button>
+      <button class="btn primary" id="confirmYes" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="shotModal" hidden role="dialog" aria-modal="true" aria-labelledby="shotTitle">
+  <div class="modal-card wide">
+    <h2 id="shotTitle">Tafelbild gespeichert</h2>
+    <p class="hint" id="shotText"></p>
+    <img id="shotImg" alt="Vorschau des gespeicherten Tafelbilds">
+    <div class="modal-actions">
+      <button class="btn" id="shotAgain" type="button">Nochmal herunterladen</button>
+      <button class="btn primary" id="shotClose" type="button">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+(() => {
+  const STORE = 'wo-bin-ich.v1';
+  const DEFAULT_ZONES = [
+    { icon: '📖', title: 'Lesen im Lernhafen' },
+    { icon: '✏️', title: 'Aufgaben im Klassenraum' },
+    { icon: '🧩', title: 'Leise Spielen in der Pausenhalle' },
+    { icon: '🏃', title: 'Draußen Toben' }
+  ];
+  const $ = (s) => document.querySelector(s);
+  const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
+  const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+
+  function sampleState() {
+    const names = ['Ayla', 'Ben', 'Clara', 'David', 'Emil', 'Finja', 'Hamza', 'Ida', 'Jonas', 'Lea', 'Mats', 'Nora', 'Ole', 'Paula', 'Samira', 'Theo'];
+    const place = { Clara: 0, Hamza: 1, Lea: 1, Ida: 2, Ole: 2, Ben: 3, Jonas: 3, Mats: 3 };
+    const id = uid();
+    return {
+      classes: [{ id, name: 'Beispielklasse', names: names.map((n, i) => ({ id: uid(), name: n, zone: n in place ? place[n] : null, t: i })) }],
+      activeId: id,
+      zones: DEFAULT_ZONES.map((z) => ({ ...z }))
+    };
+  }
+
+  let state = null;
+  try { state = JSON.parse(localStorage.getItem(STORE)); } catch (e) { state = null; }
+  if (!state || !Array.isArray(state.classes)) state = sampleState();
+  if (!Array.isArray(state.zones) || state.zones.length !== 4) state.zones = DEFAULT_ZONES.map((z) => ({ ...z }));
+  if (!state.classes.some((c) => c.id === state.activeId)) state.activeId = state.classes[0]?.id ?? null;
+
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* Speicher nicht verfügbar */ } };
+  const cls = () => state.classes.find((c) => c.id === state.activeId) || null;
+
+  const board = $('#board');
+  const pool = $('#pool');
+  const zoneEls = [...document.querySelectorAll('.zone')];
+  const drags = new Map();
+  let selectedId = null;
+
+  /* ---------- Darstellung ---------- */
+  function chipEl(n) {
+    const el = document.createElement('div');
+    el.className = 'chip';
+    el.dataset.id = n.id;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.textContent = n.name;
+    if ([...drags.values()].some((d) => d.ghost && d.id === n.id)) el.classList.add('dragging');
+    if (selectedId === n.id) el.classList.add('selected');
+    return el;
+  }
+
+  function render() {
+    const c = cls();
+    $('#classLabel').textContent = c ? c.name : 'Keine Klasse';
+    const list = c ? c.names : [];
+    const inPool = [], byZone = [[], [], [], []];
+    for (const n of list) (n.zone === null || n.zone === undefined || !byZone[n.zone] ? inPool : byZone[n.zone]).push(n);
+    inPool.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    byZone.forEach((a) => a.sort((x, y) => x.t - y.t));
+
+    pool.replaceChildren(...inPool.map(chipEl));
+    if (!inPool.length) {
+      const h = document.createElement('span');
+      h.className = 'pool-hint';
+      h.textContent = !c ? 'Noch keine Klasse. Über „Klassen & Namen“ eine Klasse anlegen oder eine Excel-Liste laden.'
+        : !list.length ? 'Diese Klasse hat noch keine Namen. Über „Klassen & Namen“ eintragen oder eine Excel-Liste laden.'
+        : 'Alle sind eingeteilt.';
+      pool.append(h);
+    }
+    zoneEls.forEach((z, i) => {
+      z.querySelector('.zone-icon').textContent = state.zones[i].icon;
+      z.querySelector('.zone-title').textContent = state.zones[i].title;
+      z.querySelector('.zone-count').textContent = byZone[i].length;
+      z.querySelector('.zone-body').replaceChildren(...byZone[i].map(chipEl));
+    });
+    if (!$('#drawer').hidden) renderDrawer();
+  }
+
+  function updateDate() {
+    const d = new Date();
+    $('#dateLabel').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+  }
+
+  function moveName(id, zone) {
+    const c = cls(); if (!c) return;
+    const n = c.names.find((x) => x.id === id); if (!n) return;
+    n.zone = zone === 'pool' ? null : Number(zone);
+    n.t = Date.now();
+    save();
+  }
+
+  /* ---------- Ziehen & Ablegen (Maus, Stift, Touch, mehrere Finger gleichzeitig) ---------- */
+  function dropTargetAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest('#board [data-zone]') : null;
+  }
+  function clearOver() { document.querySelectorAll('.over').forEach((e) => e.classList.remove('over')); }
+  function refreshOver() {
+    clearOver();
+    for (const d of drags.values()) if (d.ghost && d.target) d.target.classList.add('over');
+  }
+
+  board.addEventListener('pointerdown', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    const r = chip.getBoundingClientRect();
+    drags.set(e.pointerId, { id: chip.dataset.id, chip, x0: e.clientX, y0: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, ghost: null, target: null });
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    const d = drags.get(e.pointerId); if (!d) return;
+    if (!d.ghost) {
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 7) return;
+      const src = board.querySelector(`.chip[data-id="${d.id}"]`) || d.chip;
+      const g = src.cloneNode(true);
+      g.classList.add('ghost'); g.classList.remove('selected', 'dragging');
+      g.style.width = d.w + 'px';
+      g.style.setProperty('--c', getComputedStyle(src).getPropertyValue('--c'));
+      document.body.append(g);
+      d.ghost = g;
+      src.classList.add('dragging');
+      if (selectedId) { selectedId = null; board.querySelectorAll('.chip.selected').forEach((c) => c.classList.remove('selected')); }
+    }
+    d.ghost.style.transform = `translate(${e.clientX - d.dx}px, ${e.clientY - d.dy}px) rotate(-2deg) scale(1.06)`;
+    d.target = dropTargetAt(e.clientX, e.clientY);
+    refreshOver();
+  });
+
+  function endDrag(e, cancelled) {
+    const d = drags.get(e.pointerId); if (!d) return;
+    drags.delete(e.pointerId);
+    if (d.ghost) {
+      d.ghost.remove();
+      const target = cancelled ? null : dropTargetAt(e.clientX, e.clientY);
+      if (target) moveName(d.id, target.dataset.zone);
+      refreshOver();
+      render();
+    } else if (!cancelled) {
+      selectedId = selectedId === d.id ? null : d.id;
+      render();
+    }
+  }
+  window.addEventListener('pointerup', (e) => endDrag(e, false));
+  window.addEventListener('pointercancel', (e) => endDrag(e, true));
+  board.addEventListener('contextmenu', (e) => { if (e.target.closest('.chip')) e.preventDefault(); });
+
+  // Antippen: erst Namen antippen, dann Ort antippen
+  board.addEventListener('click', (e) => {
+    if (!selectedId || e.target.closest('.chip') || e.target.closest('.actions')) return;
+    const z = e.target.closest('[data-zone]');
+    if (z) { moveName(selectedId, z.dataset.zone); selectedId = null; render(); }
+  });
+  board.addEventListener('keydown', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedId = selectedId === chip.dataset.id ? null : chip.dataset.id; render(); board.querySelector(`.chip[data-id="${chip.dataset.id}"]`)?.focus(); }
+    const k = { '1': 0, '2': 1, '3': 2, '4': 3, '0': 'pool' }[e.key];
+    if (k !== undefined) { moveName(chip.dataset.id, k); selectedId = null; render(); board.querySelector(`.chip[data-id="${chip.dataset.id}"]`)?.focus(); }
+  });
+
+  /* ---------- Hinweise & Dialoge ---------- */
+  let toastTimer;
+  function toast(msg, actionLabel, action) {
+    const t = $('#toast');
+    t.replaceChildren(document.createTextNode(msg));
+    if (actionLabel) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = actionLabel;
+      b.onclick = () => { t.hidden = true; action(); };
+      t.append(b);
+    }
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, actionLabel ? 7000 : 3500);
+  }
+
+  function confirmBox(title, text, okLabel) {
+    return new Promise((resolve) => {
+      const m = $('#confirmModal');
+      $('#confirmTitle').textContent = title;
+      $('#confirmText').textContent = text;
+      $('#confirmYes').textContent = okLabel || 'OK';
+      m.hidden = false;
+      $('#confirmNo').focus();
+      const done = (v) => { m.hidden = true; $('#confirmYes').onclick = $('#confirmNo').onclick = null; resolve(v); };
+      $('#confirmYes').onclick = () => done(true);
+      $('#confirmNo').onclick = () => done(false);
+    });
+  }
+
+  /* ---------- Kopfzeilen-Knöpfe ---------- */
+  $('#btnReset').addEventListener('click', () => {
+    const c = cls(); if (!c) return;
+    const before = c.names.map((n) => [n.id, n.zone, n.t]);
+    if (!before.some(([, z]) => z !== null && z !== undefined)) { toast('Alle sind schon im Namensfeld.'); return; }
+    c.names.forEach((n) => { n.zone = null; });
+    save(); render();
+    toast('Alle zurückgesetzt.', 'Rückgängig', () => {
+      const m = new Map(before.map(([id, z, t]) => [id, [z, t]]));
+      c.names.forEach((n) => { if (m.has(n.id)) [n.zone, n.t] = m.get(n.id); });
+      save(); render();
+    });
+  });
+
+  $('#btnFull').addEventListener('click', () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.().catch(() => toast('Vollbild ist hier nicht möglich. Taste F11 versuchen.'));
+    } catch (e) { toast('Vollbild ist hier nicht möglich. Taste F11 versuchen.'); }
+  });
+
+  /* ---------- Tafelbild als PNG speichern ---------- */
+  let lastShot = null;
+  function fileStamp() {
+    const d = new Date(), p = (v) => String(v).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`;
+  }
+  function download(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener';
+    document.body.append(a); a.click(); a.remove();
+  }
+  $('#btnShot').addEventListener('click', async () => {
+    if (!window.html2canvas) { toast('Screenshot geht gerade nicht: Die Bild-Funktion konnte nicht geladen werden (keine Internetverbindung?).'); return; }
+    const btn = $('#btnShot'); btn.disabled = true;
+    try {
+      updateDate();
+      if (document.fonts?.ready) await document.fonts.ready;
+      const canvas = await window.html2canvas(board, { backgroundColor: getComputedStyle(document.body).backgroundColor, scale: Math.max(2, window.devicePixelRatio || 1), logging: false });
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      if (lastShot) URL.revokeObjectURL(lastShot.url);
+      const safe = (cls()?.name || 'Tafel').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+      lastShot = { url: URL.createObjectURL(blob), name: `Wo-bin-ich_${safe}_${fileStamp()}.png` };
+      download(lastShot.url, lastShot.name);
+      $('#shotImg').src = lastShot.url;
+      $('#shotText').textContent = `Dateiname: ${lastShot.name} (im Download-Ordner). Falls kein Download gestartet ist: Bild mit Rechtsklick oder langem Drücken speichern.`;
+      $('#shotModal').hidden = false;
+      $('#shotClose').focus();
+    } catch (err) {
+      toast('Das Tafelbild konnte nicht erstellt werden.');
+      console.error(err);
+    } finally { btn.disabled = false; }
+  });
+  $('#shotAgain').addEventListener('click', () => { if (lastShot) download(lastShot.url, lastShot.name); });
+  $('#shotClose').addEventListener('click', () => { $('#shotModal').hidden = true; });
+
+  /* ---------- Seitenleiste: Klassen & Namen ---------- */
+  function openDrawer() { $('#drawer').hidden = false; $('#scrim').hidden = false; renderDrawer(); $('#nameInput').focus(); }
+  function closeDrawer() { $('#drawer').hidden = true; $('#scrim').hidden = true; }
+  $('#btnManage').addEventListener('click', openDrawer);
+  $('#btnClose').addEventListener('click', closeDrawer);
+  $('#scrim').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('#confirmModal').hidden) $('#confirmNo').click();
+    else if (!$('#shotModal').hidden) $('#shotModal').hidden = true;
+    else if (!$('#drawer').hidden) closeDrawer();
+  });
+
+  function renderDrawer() {
+    const c = cls();
+    const sel = $('#classSelect');
+    sel.replaceChildren(...state.classes.map((k) => { const o = new Option(`${k.name} (${k.names.length})`, k.id); o.selected = k.id === state.activeId; return o; }));
+    sel.disabled = !state.classes.length;
+    if (document.activeElement !== $('#className')) $('#className').value = c ? c.name : '';
+    $('#className').disabled = !c;
+    $('#btnDelClass').disabled = !c;
+    $('#btnDelAll').disabled = !c || !c.names.length;
+    $('#impAdd').disabled = !c;
+    if (!c) $('#impNew').checked = true;
+    $('#listTitle').textContent = c ? `Namen in „${c.name}“ (${c.names.length})` : 'Namen';
+    const items = (c ? [...c.names] : []).sort((a, b) => a.name.localeCompare(b.name, 'de')).map((n) => {
+      const li = document.createElement('li');
+      li.append(document.createTextNode(n.name));
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = '×'; b.dataset.del = n.id;
+      b.setAttribute('aria-label', `${n.name} löschen`); b.title = `${n.name} löschen`;
+      li.append(b);
+      return li;
+    });
+    $('#nameList').replaceChildren(...items);
+    if (!items.length) { const li = document.createElement('p'); li.className = 'hint'; li.textContent = 'Noch keine Namen.'; $('#nameList').append(li); }
+
+    const ze = $('#zoneEdit');
+    if (!ze.contains(document.activeElement)) {
+      ze.replaceChildren(...state.zones.map((z, i) => {
+        const row = document.createElement('div');
+        row.className = 'zone-edit';
+        const ic = Object.assign(document.createElement('input'), { type: 'text', value: z.icon, maxLength: 4, id: `zoneIcon${i}` });
+        ic.setAttribute('aria-label', `Symbol für Ort ${i + 1}`);
+        ic.style.borderColor = `var(--z${i})`;
+        const ti = Object.assign(document.createElement('input'), { type: 'text', value: z.title, maxLength: 60, id: `zoneTitle${i}` });
+        ti.setAttribute('aria-label', `Name für Ort ${i + 1}`);
+        ti.style.borderColor = `var(--z${i})`;
+        ic.addEventListener('input', () => { state.zones[i].icon = ic.value.trim(); save(); render(); });
+        ti.addEventListener('input', () => { state.zones[i].title = ti.value; save(); render(); });
+        row.append(ic, ti);
+        return row;
+      }));
+    }
+  }
+
+  $('#classSelect').addEventListener('change', (e) => { state.activeId = e.target.value; selectedId = null; save(); render(); });
+  $('#className').addEventListener('input', (e) => { const c = cls(); if (!c) return; c.name = clean(e.target.value) || 'Ohne Namen'; save(); render(); });
+
+  function newClass(name) {
+    const base = clean(name) || 'Neue Klasse';
+    let n = base, i = 2;
+    while (state.classes.some((c) => c.name.toLowerCase() === n.toLowerCase())) n = `${base} ${i++}`;
+    const c = { id: uid(), name: n, names: [] };
+    state.classes.push(c);
+    state.activeId = c.id;
+    return c;
+  }
+  $('#btnNewClass').addEventListener('click', () => {
+    newClass('Neue Klasse'); save(); render();
+    $('#className').focus(); $('#className').select();
+  });
+  $('#btnDelClass').addEventListener('click', async () => {
+    const c = cls(); if (!c) return;
+    if (!(await confirmBox('Klasse löschen?', `„${c.name}“ mit ${c.names.length} Namen wird gelöscht. Das lässt sich nicht rückgängig machen.`, 'Klasse löschen'))) return;
+    state.classes = state.classes.filter((k) => k.id !== c.id);
+    state.activeId = state.classes[0]?.id ?? null;
+    save(); render();
+    toast(`„${c.name}“ gelöscht.`);
+  });
+  $('#btnDelAll').addEventListener('click', async () => {
+    const c = cls(); if (!c || !c.names.length) return;
+    if (!(await confirmBox('Alle Namen löschen?', `Alle ${c.names.length} Namen in „${c.name}“ werden gelöscht. Die Klasse selbst bleibt bestehen.`, 'Alle löschen'))) return;
+    c.names = [];
+    save(); render();
+  });
+  $('#nameList').addEventListener('click', (e) => {
+    const id = e.target.dataset?.del; if (!id) return;
+    const c = cls(); if (!c) return;
+    const idx = c.names.findIndex((n) => n.id === id); if (idx < 0) return;
+    const [removed] = c.names.splice(idx, 1);
+    save(); render();
+    toast(`${removed.name} gelöscht.`, 'Rückgängig', () => { c.names.splice(idx, 0, removed); save(); render(); });
+  });
+
+  function addNames(c, names) {
+    const have = new Set(c.names.map((n) => n.name.toLowerCase()));
+    let added = 0, dup = 0;
+    for (const raw of names) {
+      const name = clean(raw);
+      if (!name) continue;
+      if (have.has(name.toLowerCase())) { dup++; continue; }
+      have.add(name.toLowerCase());
+      c.names.push({ id: uid(), name, zone: null, t: Date.now() });
+      added++;
+    }
+    return { added, dup };
+  }
+  $('#addForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = $('#nameInput');
+    const parts = input.value.split(/[,;\n]/).map(clean).filter(Boolean);
+    if (!parts.length) return;
+    const c = cls() || newClass('Meine Klasse');
+    const { added, dup } = addNames(c, parts);
+    save(); render();
+    input.value = ''; input.focus();
+    if (dup) toast(added ? `${added} hinzugefügt, ${dup} schon vorhanden.` : 'Dieser Name ist schon in der Klasse.');
+  });
+
+  $('#btnZoneDefault').addEventListener('click', () => {
+    state.zones = DEFAULT_ZONES.map((z) => ({ ...z }));
+    document.activeElement?.blur();
+    save(); render();
+  });
+
+  /* ---------- Excel-/CSV-Import ---------- */
+  function decodeText(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
+    catch (e) { return new TextDecoder('windows-1252').decode(buf); }
+  }
+  function parseCsv(text) {
+    const first = text.split(/\r?\n/).find((l) => l.trim()) || '';
+    const delim = [';', '\t', ','].reduce((best, d) => (first.split(d).length > first.split(best).length ? d : best), ';');
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') q = false;
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === delim) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += ch;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  function extractNames(rows) {
+    rows = rows.map((r) => (r || []).map(clean)).filter((r) => r.some(Boolean));
+    if (!rows.length) return [];
+    const head = rows[0].map((h) => h.toLowerCase());
+    const find = (re) => head.findIndex((h) => re.test(h));
+    const vor = find(/^(vor\s*-?\s*name|rufname|first\s*name|vorname\(n\))/);
+    const nach = find(/^(nach\s*-?\s*name|familien\s*-?\s*name|zuname|last\s*name|surname)/);
+    const nameCol = find(/^(name|namen|schüler|schueler|schülerin|kind|kinder)\b/);
+    let col, body, last = -1;
+    if (vor >= 0) { col = vor; body = rows.slice(1); last = nach; }
+    else if (nameCol >= 0) { col = nameCol; body = rows.slice(1); }
+    else {
+      const width = Math.max(...rows.map((r) => r.length));
+      col = 0;
+      for (let i = 0; i < width; i++) {
+        const filled = rows.filter((r) => r[i] && !/^\d+([.,]\d+)?$/.test(r[i])).length;
+        if (filled > rows.length / 2) { col = i; break; }
+      }
+      body = rows;
+    }
+    const firsts = body.map((r) => r[col] || '').filter(Boolean);
+    const count = {};
+    firsts.forEach((f) => { count[f.toLowerCase()] = (count[f.toLowerCase()] || 0) + 1; });
+    return body.map((r) => {
+      const f = r[col] || '';
+      if (!f) return '';
+      if (last >= 0 && count[f.toLowerCase()] > 1 && r[last]) return `${f} ${r[last][0].toUpperCase()}.`;
+      return f;
+    }).filter(Boolean);
+  }
+  $('#fileInput').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      let rows;
+      if (/\.(csv|txt)$/i.test(file.name)) rows = parseCsv(decodeText(buf));
+      else {
+        if (!window.XLSX) { toast('Excel-Dateien können gerade nicht gelesen werden (keine Internetverbindung?). Als CSV speichern und erneut versuchen.'); return; }
+        const wb = window.XLSX.read(buf, { type: 'array' });
+        rows = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false });
+      }
+      const names = extractNames(rows);
+      if (!names.length) { toast('In der Datei wurden keine Namen gefunden.'); return; }
+      const mode = document.querySelector('input[name="importMode"]:checked')?.value;
+      const c = mode === 'add' && cls() ? cls() : newClass(file.name.replace(/\.[^.]+$/, ''));
+      const { added, dup } = addNames(c, names);
+      selectedId = null;
+      save(); render();
+      toast(`${added} Namen in „${c.name}“ übernommen` + (dup ? `, ${dup} doppelte übersprungen.` : '.'));
+    } catch (err) {
+      console.error(err);
+      toast('Die Datei konnte nicht gelesen werden. Ist es eine Excel- oder CSV-Datei?');
+    }
+  });
+
+  /* ---------- Start ---------- */
+  save();
+  updateDate();
+  setInterval(updateDate, 30000);
+  render();
+})();
+</script>
+</body>
+</html>
